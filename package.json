@@ -1,6 +1,7 @@
 {
   "name": "mcp-make-linkedin",
   "version": "1.0.0",
+  "type": "module",
   "description": "Serveur MCP pour relier Mammouth.ai à Make",
   "main": "index.js",
   "scripts": {
