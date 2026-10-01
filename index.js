@@ -80,7 +80,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 const transports = new Map();
 
 app.get("/sse", async (req, res) => {
-  const transport = new SSEServerTransport("/message", res);
+  const transport = new SSEServerTransport("https://mcp-make-linkedin.onrender.com/message", res);
   // On stocke le transport avec son ID de session généré par le SDK
   transports.set(transport.sessionId, transport);
   await server.connect(transport);
