@@ -6,11 +6,20 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprot
 
 const app = express();
 app.use(cors());
+// IMPORTANT : Permet à Express de lire le JSON envoyé par Mammouth
+app.use(express.json());
 
 // Le serveur MCP
 const server = new Server(
-  { name: "linkedin-make-mcp", version: "1.0.0" },
-  { capabilities: { tools: {} } }
+  {
+    name: "linkedin-make-mcp",
+    version: "1.0.0"
+  },
+  {
+    capabilities: {
+      tools: {}
+    }
+  }
 );
 
 // Déclaration de l'outil pour Mammouth
@@ -39,21 +48,27 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   if (request.params.name === "publish_linkedin_post") {
     const text = request.params.arguments.text;
-    const webhookUrl = process.env.MAKE_WEBHOOK_URL; // On mettra l'URL dans Render
-
+    const webhookUrl = process.env.MAKE_WEBHOOK_URL; 
+    
     if (!webhookUrl) {
       throw new Error("L'URL du Webhook Make n'est pas configurée.");
     }
-
+    
     // Envoi au webhook Make
     const response = await fetch(webhookUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json"
+      },
       body: JSON.stringify({ post_content: text })
     });
-
+    
     if (response.ok) {
-      return { toolResult: { content: [{ type: "text", text: "Le post a bien été envoyé à Make.com pour publication !" }] } };
+      return {
+        toolResult: {
+          content: [{ type: "text", text: "Le post a bien été envoyé à Make.com pour publication !" }]
+        }
+      };
     } else {
       throw new Error("Erreur lors de l'envoi à Make.com");
     }
@@ -61,18 +76,29 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   throw new Error("Outil inconnu");
 });
 
-// Configuration du transport SSE pour qu'il soit accessible par URL
-let transport;
+// Gestion multi-connexions pour éviter les plantages
+const transports = new Map();
+
 app.get("/sse", async (req, res) => {
-  transport = new SSEServerTransport("/message", res);
+  const transport = new SSEServerTransport("/message", res);
+  // On stocke le transport avec son ID de session généré par le SDK
+  transports.set(transport.sessionId, transport);
   await server.connect(transport);
+  
+  // Nettoyage en cas de déconnexion
+  req.on("close", () => {
+    transports.delete(transport.sessionId);
+  });
 });
 
 app.post("/message", async (req, res) => {
+  const sessionId = req.query.sessionId;
+  const transport = transports.get(sessionId);
+  
   if (transport) {
     await transport.handlePostMessage(req, res);
   } else {
-    res.status(503).send("Serveur non prêt");
+    res.status(404).send("Session introuvable ou expirée");
   }
 });
 
