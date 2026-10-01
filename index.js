@@ -5,9 +5,20 @@ import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 
 const app = express();
-app.use(cors());
-// On remet express.json() car le système en a besoin pour interpréter le POST
+
+// Configuration CORS très permissive pour éviter tout blocage
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
+}));
+
 app.use(express.json());
+
+// Ajout d'une route de test basique
+app.get("/", (req, res) => {
+  res.send("Le serveur MCP fonctionne !");
+});
 
 const server = new Server(
   { name: "linkedin-make-mcp", version: "1.0.0" },
@@ -15,6 +26,7 @@ const server = new Server(
 );
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
+  console.log("Mammouth a demandé la liste des outils !");
   return {
     tools: [
       {
@@ -35,55 +47,42 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   };
 });
 
+// (J'ai masqué l'intérieur de CallToolRequestSchema pour raccourcir, vous pouvez remettre la logique Make ici)
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  if (request.params.name === "publish_linkedin_post") {
-    const text = request.params.arguments.text;
-    const webhookUrl = process.env.MAKE_WEBHOOK_URL; 
-    
-    if (!webhookUrl) {
-      throw new Error("L'URL du Webhook Make n'est pas configurée.");
-    }
-    
-    const response = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ post_content: text })
-    });
-    
-    if (response.ok) {
-      return { toolResult: { content: [{ type: "text", text: "Le post a bien été envoyé à Make.com pour publication !" }] } };
-    } else {
-      throw new Error("Erreur lors de l'envoi à Make.com");
-    }
-  }
-  throw new Error("Outil inconnu");
+  console.log("Mammouth demande l'exécution de l'outil :", request.params.name);
+  return { toolResult: { content: [{ type: "text", text: "Test réussi" }] } };
 });
 
-const transports = new Map();
+// Variable globale pour le transport (plus simple pour tester)
+let transport;
 
 app.get("/sse", async (req, res) => {
-  // On utilise un chemin relatif pour plus de compatibilité avec les clients MCP
-  const transport = new SSEServerTransport("/message", res);
-  transports.set(transport.sessionId, transport);
-  await server.connect(transport);
-  
-  req.on("close", () => {
-    transports.delete(transport.sessionId);
-  });
+  console.log("-> Nouvelle connexion SSE entrante depuis Mammouth");
+  try {
+    transport = new SSEServerTransport("/message", res);
+    await server.connect(transport);
+    console.log("-> Connexion SSE établie avec succès");
+  } catch (error) {
+    console.error("-> Erreur lors de la connexion SSE :", error);
+  }
 });
 
 app.post("/message", async (req, res) => {
-  const sessionId = req.query.sessionId;
-  const transport = transports.get(sessionId);
-  
+  console.log("-> Nouveau message POST reçu sur /message");
   if (transport) {
-    await transport.handlePostMessage(req, res);
+    try {
+      await transport.handlePostMessage(req, res);
+      console.log("-> Message traité avec succès");
+    } catch (error) {
+      console.error("-> Erreur lors du traitement du message :", error);
+    }
   } else {
-    res.status(404).send("Session introuvable");
+    console.error("-> Transport non initialisé");
+    res.status(404).send("Transport non initialisé");
   }
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Serveur MCP en écoute sur le port ${PORT}`);
+  console.log(`Serveur MCP démarré et en écoute sur le port ${PORT}`);
 });
