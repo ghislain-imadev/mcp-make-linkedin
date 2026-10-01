@@ -7,7 +7,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprot
 const app = express();
 app.use(cors());
 // IMPORTANT : Permet à Express de lire le JSON envoyé par Mammouth
-app.use(express.json());
+//app.use(express.json());
 
 // Le serveur MCP
 const server = new Server(
